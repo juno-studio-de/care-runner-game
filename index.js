@@ -233,6 +233,7 @@ const GAME_CONFIG = {
   }
 
   function setupControls() {
+    // 1. Tastatur-Steuerung (Desktop)
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         e.preventDefault();
@@ -249,12 +250,18 @@ const GAME_CONFIG = {
       }
     });
 
-    // 0ms Latenz auf Smartphones
-    canvas.addEventListener('touchstart', (e) => {
+    // 2. Mobil: Überall auf dem Screen tippen zum Springen (außer auf Buttons/Links)
+    window.addEventListener('touchstart', (e) => {
+      // Ignoriert Taps auf Buttons, Links und Formularelemente
+      if (e.target.closest('button, a, [role="button"], .button, .w-button, input, textarea, select')) {
+        return;
+      }
+
       e.preventDefault();
       triggerJump();
     }, { passive: false });
 
+    // 3. Desktop: Klick mit der Maus direkt auf den Canvas
     canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch') {
         e.preventDefault();
