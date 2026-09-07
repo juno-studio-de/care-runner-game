@@ -1,81 +1,76 @@
 /**
  * PFLEGE-RUNNER ENGINE
- * - 8 Random Skins bei jedem Laden / Reload
- * - 4-Frame Laufanimation ab Sekunde 0 (Endlos-Demo)
- * - Slide-Mechanik (Pfeil nach unten)
- * - Flur mit Türen als durchscrollender Hintergrund
- * - Keine Vögel, kein Mond, keine invertierenden Nachtmodi
+ * - Delta-Time Gameloop für konstante 60 FPS auf allen Geräten (Desktop & Mobile)
+ * - 0ms Touch-Latenz für Touchscreens
+ * - Original Google Chrome Audio Engine (MasterGain gedämpft)
+ * - 1-Frame Slide, dynamische Hitboxen, Sprite-Font Renderer
  */
 
 const GAME_CONFIG = {
-  // 1. SPIELER-KOORDINATEN (Aus deiner 1x PSD/CSV)
+  // 1. SPIELER-KOORDINATEN
   PLAYER: {
-    STAND_X: 728,        // Start-X der ersten Box (Skin 1, Frame 1)
-    STAND_Y: 401,         // Start-Y der ersten Box (Skin 1, Frame 1)
-    STAND_W: 40,         // Einheitliche Breite der aufrechten Box
-    STAND_H: 49,         // Einheitliche Höhe der aufrechten Box
+    STAND_X: 728,
+    STAND_Y: 401,
+    STAND_W: 40,
+    STAND_H: 49,
 
-    SLIDE_X: 968,        // Start-X der ersten Slide-Box (Skin 1)
-    SLIDE_Y: 416,         // Start-Y der ersten Slide-Box (Skin 1)
-    SLIDE_W: 54,         // Breite der Slide-Box
-    SLIDE_H: 34,         // Höhe der Slide-Box
+    SLIDE_X: 968,
+    SLIDE_Y: 416,
+    SLIDE_W: 54,
+    SLIDE_H: 34,
 
-    ROW_STRIDE_Y: -57,    // Abstand von Oberkante Skin 1 zu Oberkante Skin 2
-    TOTAL_SKINS: 6       // 8 verschiedene Charaktere
+    ROW_STRIDE_Y: -57,
+    TOTAL_SKINS: 6
   },
 
-  // 2. WELT / FLUR (Durchlaufender Streifen mit Türen)
+  // 2. WELT / FLUR
   HORIZON: {
     X: 2,
     Y: 459,
-    WIDTH: 1114,         // Breite deines Flurband-Segments
-    HEIGHT: 58           // Höhe des Flurbands
+    WIDTH: 1114,
+    HEIGHT: 58
   },
 
-  // 3. BODENNIVEAU IM SPIELFELD
-  GROUND_Y: 155,         // Y-Position der Fußsohle im Spielfeld (0 = oben, 260 = unten)
+  // 3. BODENNIVEAU IM CANVAS
+  GROUND_Y: 155,
 
-  // 4. HINDERNISSE (Aus deiner 1x PSD/CSV)
+  // 4. HINDERNISSE
   OBSTACLES: [
     { name: 'BETT_1',     x: 245, y: 407, width: 65, height: 31 },
-    { name: 'BETT_2', x: 318, y: 407, width: 65, height: 31 },
-    { name: 'ROLLATOR_1',        x: 391, y: 414, width: 21, height: 24 },
-    { name: 'ROLLATOR_2',    x: 420, y: 417, width: 21, height: 21 },
-    { name: 'ROLLSTUHL',    x: 449, y: 409, width: 31, height: 29 },
-    { name: 'MEDI_WAGEN',      x: 488, y: 401, width: 50, height: 37 },
-    { name: 'LIFTER_1',      x: 546, y: 401, width: 44, height: 52 },
-    { name: 'LIFTER_2',      x: 598, y: 401, width: 42, height: 52 },
-    { name: 'SCHRANK_1',     x: 649, y: 401, width: 31, height: 52 },
-    { name: 'SCHRANK_2',     x: 689, y: 401, width: 31, height: 52 }
+    { name: 'BETT_2',     x: 318, y: 407, width: 65, height: 31 },
+    { name: 'ROLLATOR_1', x: 391, y: 414, width: 21, height: 24 },
+    { name: 'ROLLATOR_2', x: 420, y: 417, width: 21, height: 21 },
+    { name: 'ROLLSTUHL',  x: 449, y: 409, width: 31, height: 29 },
+    { name: 'MEDI_WAGEN', x: 488, y: 401, width: 50, height: 37 },
+    { name: 'LIFTER_1',   x: 546, y: 401, width: 44, height: 52 },
+    { name: 'LIFTER_2',   x: 598, y: 401, width: 42, height: 52 },
+    { name: 'SCHRANK_1',  x: 649, y: 401, width: 31, height: 52 },
+    { name: 'SCHRANK_2',  x: 689, y: 401, width: 31, height: 52 }
   ],
 
-  // 5. UI-SYMBOLE (Aus deiner 1x PSD/CSV)
+  // 5. UI-SYMBOLE
   UI: {
     GAME_OVER:    { x: 46, y: 414, width: 191, height: 11 },
-    RESTART_BTN:  { x: 2, y: 401, width: 36,  height: 32 },
+    RESTART_BTN:  { x: 2,  y: 401, width: 36,  height: 32 },
     SCORE_DIGITS: { x: 46, y: 401, width: 119, height: 11 }
   },
 
-  // 6. GESCHWINDIGKEITEN (Hier feintunen)
+  // 6. GESCHWINDIGKEITEN
   SPEED: {
-    START: 4.2,          // Vorher 6.0 (Start-Tempo: 4.0 - 4.5 ist deutlich entspannter)
-    DEMO: 2.2,           // Vorher 3.5 (Gemütliches Joggen im Demo-Modus)
-    ACCELERATION: 0.0005 // Vorher 0.0007 (Wie sanft das Tempo mit der Zeit anzieht)
+    START: 4.2,
+    DEMO: 2.2,
+    ACCELERATION: 0.0005
   }
 };
 
 (function () {
   'use strict';
 
-  const canvas = document.getElementById('care-canvas');
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-
-  const isHiDPI = window.devicePixelRatio > 1;
-  const spriteImg = document.getElementById('offline-resources-1x');
+  let canvas = null;
+  let ctx = null;
+  let spriteImg = null;
   const scaleRatio = 1;
 
-  // Zufälligen Skin bestimmen (0 bis 7)
   const activeSkinIndex = Math.floor(Math.random() * GAME_CONFIG.PLAYER.TOTAL_SKINS);
 
   let isPlaying = false;
@@ -84,20 +79,21 @@ const GAME_CONFIG = {
   let score = 0;
   let highScore = parseInt(localStorage.getItem('care_runner_hi') || '0', 10);
   let distanceRan = 0;
-  let frameCount = 0;
 
-  // Meilenstein-Effekt (100er-Schritte)
+  // Zeitgesteuerte Delta-Time & Animationsvariablen
+  let lastTime = 0;
+  let animTimer = 0;
+
+  // Meilenstein-Effekt
   let lastMilestone = 0;
   let milestoneScore = 0;
   let isFlashingScore = false;
   let flashTimer = 0;
-  const FLASH_FRAMES = 84; // ~1,4 Sekunden Blinken
+  const FLASH_FRAMES = 84;
 
-  // Hintergrund-Positionierung
   let floorX1 = 0;
   let floorX2 = GAME_CONFIG.HORIZON.WIDTH;
 
-  // Spieler-Zustand
   const player = {
     x: 60,
     y: GAME_CONFIG.GROUND_Y - GAME_CONFIG.PLAYER.STAND_H,
@@ -119,12 +115,12 @@ const GAME_CONFIG = {
   // ==========================================
   let audioCtx = null;
   let masterGain = null;
-  const MASTER_VOLUME = 0.18; // Lautstärke: 0.15 bis 0.25 ist dezent und angenehm
+  const MASTER_VOLUME = 0.18;
 
   const soundBuffers = {
-    press: null,   // Sprung-Sound
-    hit: null,     // Crash-Sound
-    reached: null  // 100er Meilenstein
+    press: null,
+    hit: null,
+    reached: null
   };
 
   function base64ToArrayBuffer(base64) {
@@ -152,13 +148,10 @@ const GAME_CONFIG = {
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-      // Zentraler Lautstärkeregler
       masterGain = audioCtx.createGain();
       masterGain.gain.setValueAtTime(MASTER_VOLUME, audioCtx.currentTime);
       masterGain.connect(audioCtx.destination);
 
-      // Lädt die drei Original-Sounds
       loadSound('offline-sound-press', 'press');
       loadSound('offline-sound-hit', 'hit');
       loadSound('offline-sound-reached', 'reached');
@@ -173,13 +166,12 @@ const GAME_CONFIG = {
       try {
         const source = audioCtx.createBufferSource();
         source.buffer = buffer;
-        source.connect(masterGain); // Signal läuft gedämpft durch den GainNode
+        source.connect(masterGain);
         source.start(0);
         return;
       } catch (e) {}
     }
 
-    // Fallback für HTML-Audio
     const el = document.getElementById(fallbackId);
     if (el) {
       el.volume = MASTER_VOLUME;
@@ -201,16 +193,9 @@ const GAME_CONFIG = {
   }
 
   function triggerJump() {
-    initAudio(); // Schaltet Audio nach Benutzer-Interaktion frei
+    initAudio();
 
-    if (isGameOver) {
-      resetGame();
-      player.dy = player.jumpForce;
-      player.grounded = false;
-      return;
-    }
-
-    // 1. Neustart nach Crash inklusive direktem Sprung
+    // Neustart nach Game Over
     if (isGameOver) {
       resetGame();
       player.dy = player.jumpForce;
@@ -219,13 +204,13 @@ const GAME_CONFIG = {
       return;
     }
 
-    // 2. Start aus dem Demo-Lauf
+    // Start aus Demo-Lauf
     if (!isPlaying) {
       isPlaying = true;
       isGameOver = false;
     }
 
-    // 3. Sprung ausführen
+    // Sprung
     if (player.grounded && !player.isDucking) {
       player.dy = player.jumpForce;
       player.grounded = false;
@@ -247,27 +232,36 @@ const GAME_CONFIG = {
     }
   }
 
-  // Steuerung
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp') {
+  function setupControls() {
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        triggerJump();
+      } else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        setDucking(true);
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'ArrowDown') {
+        setDucking(false);
+      }
+    });
+
+    // 0ms Latenz auf Smartphones
+    canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       triggerJump();
-    } else if (e.code === 'ArrowDown') {
-      e.preventDefault();
-      setDucking(true);
-    }
-  });
+    }, { passive: false });
 
-  window.addEventListener('keyup', (e) => {
-    if (e.code === 'ArrowDown') {
-      setDucking(false);
-    }
-  });
-
-  canvas.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    triggerJump();
-  });
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') {
+        e.preventDefault();
+        triggerJump();
+      }
+    });
+  }
 
   function resetGame() {
     activeObstacles = [];
@@ -276,7 +270,7 @@ const GAME_CONFIG = {
     lastMilestone = 0;
     isFlashingScore = false;
     flashTimer = 0;
-    gameSpeed = GAME_CONFIG.SPEED.START; // Setzt wieder auf das entspannte Start-Tempo
+    gameSpeed = GAME_CONFIG.SPEED.START;
     isGameOver = false;
     isPlaying = true;
     player.y = GAME_CONFIG.GROUND_Y - GAME_CONFIG.PLAYER.STAND_H;
@@ -298,12 +292,10 @@ const GAME_CONFIG = {
     });
   }
 
-  function update() {
-    frameCount++;
-
-    // 1. Hintergrund (Flur) scrollen – STOPPT sofort bei isGameOver
+  function update(deltaFactor) {
+    // 1. Hintergrund-Scrollen an Echtzeit gekoppelt
     if (!isGameOver) {
-      const currentScrollSpeed = isPlaying ? gameSpeed : GAME_CONFIG.SPEED.DEMO;
+      const currentScrollSpeed = (isPlaying ? gameSpeed : GAME_CONFIG.SPEED.DEMO) * deltaFactor;
       floorX1 -= currentScrollSpeed;
       floorX2 -= currentScrollSpeed;
 
@@ -313,8 +305,8 @@ const GAME_CONFIG = {
 
     // 2. Spieler-Physik
     if (!player.grounded) {
-      player.dy += player.gravity;
-      player.y += player.dy;
+      player.dy += player.gravity * deltaFactor;
+      player.y += player.dy * deltaFactor;
 
       const currentGroundY = GAME_CONFIG.GROUND_Y - (player.isDucking ? GAME_CONFIG.PLAYER.SLIDE_H : GAME_CONFIG.PLAYER.STAND_H);
       if (player.y >= currentGroundY) {
@@ -326,14 +318,13 @@ const GAME_CONFIG = {
 
     // 3. Aktiver Spielstatus
     if (isPlaying && !isGameOver) {
-      distanceRan += gameSpeed * 0.05;
+      distanceRan += (gameSpeed * 0.05) * deltaFactor;
       score = Math.floor(distanceRan);
       if (score > highScore) {
         highScore = score;
         localStorage.setItem('care_runner_hi', highScore);
       }
 
-      // 100er Meilenstein erreicht: Sound abspielen & Blink-Timer starten
       if (score > 0 && score % 100 === 0 && score !== lastMilestone) {
         lastMilestone = score;
         milestoneScore = score;
@@ -342,18 +333,16 @@ const GAME_CONFIG = {
         playScoreSound();
       }
 
-      // Blink-Timer herunterzählen
       if (isFlashingScore) {
-        flashTimer--;
+        flashTimer -= deltaFactor;
         if (flashTimer <= 0) {
           isFlashingScore = false;
         }
       }
 
-      gameSpeed += GAME_CONFIG.SPEED.ACCELERATION;
+      gameSpeed += GAME_CONFIG.SPEED.ACCELERATION * deltaFactor;
 
-      // Hindernisse bewegen & spawnen
-      obstacleTimer++;
+      obstacleTimer += deltaFactor;
       if (obstacleTimer > Math.max(55, 110 - gameSpeed * 4)) {
         if (Math.random() < 0.6) spawnObstacle();
         obstacleTimer = 0;
@@ -361,14 +350,12 @@ const GAME_CONFIG = {
 
       for (let i = activeObstacles.length - 1; i >= 0; i--) {
         const obs = activeObstacles[i];
-        obs.x -= gameSpeed;
+        obs.x -= gameSpeed * deltaFactor;
 
-        // 1. Passgenaue Hitbox für den Spieler (schneidet den Leerraum links & rechts ab)
         const pHit = player.isDucking
-          ? { x: player.x + 4,  y: player.y + 3, w: player.w - 8,  h: player.h - 5 }  // Beim Rutschen
-          : { x: player.x + 10, y: player.y + 4, w: player.w - 18, h: player.h - 6 }; // Aufrecht (schlanker Körper)
+          ? { x: player.x + 4,  y: player.y + 3, w: player.w - 8,  h: player.h - 5 }
+          : { x: player.x + 10, y: player.y + 4, w: player.w - 18, h: player.h - 6 };
 
-        // 2. Passgenaue Hitbox für das Hindernis
         const oHit = {
           x: obs.x + 4,
           y: obs.y + 3,
@@ -376,7 +363,6 @@ const GAME_CONFIG = {
           h: obs.h - 5
         };
 
-        // AABB-Kollisionsprüfung
         if (
           pHit.x < oHit.x + oHit.w &&
           pHit.x + pHit.w > oHit.x &&
@@ -391,16 +377,18 @@ const GAME_CONFIG = {
       }
     }
 
-    // 4. Lauf-Frame takten
-    if (frameCount % 9 === 0) {
+    // 4. Lauf-Animation an Echtzeit gekoppelt
+    animTimer += deltaFactor;
+    if (animTimer >= 9) {
       player.animFrame = (player.animFrame + 1) % 4;
+      animTimer = 0;
     }
   }
 
   function drawPixelText(text, startX, startY) {
     const digits = GAME_CONFIG.UI.SCORE_DIGITS;
-    const charWidth = 10;  // Breite einer Ziffer auf deinem 1x-Sheet
-    const charHeight = digits.height; // 11 px
+    const charWidth = 10;
+    const charHeight = digits.height;
 
     let curX = startX;
 
@@ -409,7 +397,7 @@ const GAME_CONFIG = {
       let charIndex = -1;
 
       if (char >= '0' && char <= '9') {
-        charIndex = char.charCodeAt(0) - 48; // 0 bis 9
+        charIndex = char.charCodeAt(0) - 48;
       } else if (char === 'H') {
         charIndex = 10;
       } else if (char === 'I') {
@@ -424,7 +412,6 @@ const GAME_CONFIG = {
         );
       }
 
-      // Weiterrücken: Leerzeichen sind etwas schmaler, Buchstaben bekommen 1px Abstand
       curX += (char === ' ') ? 6 : charWidth + 1;
     }
   }
@@ -432,7 +419,6 @@ const GAME_CONFIG = {
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Hintergrund zeichnen
     const h = GAME_CONFIG.HORIZON;
     const floorDrawY = GAME_CONFIG.GROUND_Y - 54;
 
@@ -447,7 +433,6 @@ const GAME_CONFIG = {
       floorX2, floorDrawY, h.WIDTH, h.HEIGHT
     );
 
-    // 2. Hindernisse zeichnen
     activeObstacles.forEach((obs) => {
       ctx.drawImage(
         spriteImg,
@@ -456,7 +441,6 @@ const GAME_CONFIG = {
       );
     });
 
-    // 3. Spieler zeichnen
     const pCfg = GAME_CONFIG.PLAYER;
     const skinYOffset = activeSkinIndex * pCfg.ROW_STRIDE_Y;
 
@@ -466,16 +450,16 @@ const GAME_CONFIG = {
     let sh = pCfg.STAND_H;
 
     if (isGameOver) {
-      sx += 5 * pCfg.STAND_W; // Crash Frame
+      sx += 5 * pCfg.STAND_W;
     } else if (!player.grounded) {
-      sx += 4 * pCfg.STAND_W; // Sprung Frame
+      sx += 4 * pCfg.STAND_W;
     } else if (player.isDucking) {
       sx = pCfg.SLIDE_X;
       sy = pCfg.SLIDE_Y + skinYOffset;
       sw = pCfg.SLIDE_W;
       sh = pCfg.SLIDE_H;
     } else {
-      sx += player.animFrame * pCfg.STAND_W; // 4-Frame Laufanimation
+      sx += player.animFrame * pCfg.STAND_W;
     }
 
     ctx.drawImage(
@@ -484,10 +468,7 @@ const GAME_CONFIG = {
       Math.round(player.x), Math.round(player.y), sw, sh
     );
 
-    // 4. UI / Score (Original Pixel-Art mit Blinken bei 100er-Schritten)
     const displayScoreNum = isFlashingScore ? milestoneScore : score;
-
-    // Taktet die Ziffern sichtbar / unsichtbar (alle 14 Frames an/aus)
     const showScoreDigits = !isFlashingScore || (Math.floor(flashTimer / 14) % 2 === 0);
     const scorePart = showScoreDigits ? String(displayScoreNum).padStart(5, '0') : '     ';
 
@@ -501,7 +482,6 @@ const GAME_CONFIG = {
       const go = GAME_CONFIG.UI.GAME_OVER;
       const rb = GAME_CONFIG.UI.RESTART_BTN;
 
-      // Math.round() verhindert unschöne Halbpixel-Verzerrungen
       ctx.drawImage(
         spriteImg,
         go.x, go.y, go.width, go.height,
@@ -516,16 +496,45 @@ const GAME_CONFIG = {
     }
   }
 
-  function gameLoop() {
-    update();
+  function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const elapsed = timestamp - lastTime;
+    lastTime = timestamp;
+
+    // Normalisiert auf 60 FPS (16.667ms = Faktor 1.0)
+    const deltaFactor = Math.min(Math.max(elapsed / 16.667, 0.1), 2.0);
+
+    update(deltaFactor);
     draw();
     requestAnimationFrame(gameLoop);
   }
 
-  // Sicherstellen, dass das Sprite geladen ist
-  if (spriteImg.complete) {
-    gameLoop();
+  function initGame() {
+    canvas = document.getElementById('care-canvas');
+    if (!canvas) return;
+
+    // Fallback: Webflow Custom Element auf die optimalen Pixelmaße setzen
+    if (!canvas.width || canvas.width === 300) canvas.width = 580;
+    if (!canvas.height || canvas.height === 150) canvas.height = 200;
+
+    ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    spriteImg = document.getElementById('offline-resources-1x');
+    if (!spriteImg) return;
+
+    setupControls();
+
+    if (spriteImg.complete && spriteImg.naturalWidth > 0) {
+      requestAnimationFrame(gameLoop);
+    } else {
+      spriteImg.addEventListener('load', () => requestAnimationFrame(gameLoop));
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initGame);
   } else {
-    spriteImg.addEventListener('load', gameLoop);
+    initGame();
   }
 })();
